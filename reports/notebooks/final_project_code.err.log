@@ -1,0 +1,179 @@
+Traceback (most recent call last):
+  File "C:\Users\desir\AppData\Local\Programs\Python\Python313\Lib\site-packages\jupyter_cache\executors\utils.py", line 58, in single_nb_execution
+    executenb(
+    ~~~~~~~~~^
+        nb,
+        ^^^
+    ...<4 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    )
+    ^
+  File "C:\Users\desir\AppData\Local\Programs\Python\Python313\Lib\site-packages\nbclient\client.py", line 1319, in execute
+    return NotebookClient(nb=nb, resources=resources, km=km, **kwargs).execute()
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\desir\AppData\Local\Programs\Python\Python313\Lib\site-packages\jupyter_core\utils\__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\desir\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py", line 720, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "C:\Users\desir\AppData\Local\Programs\Python\Python313\Lib\site-packages\nbclient\client.py", line 709, in async_execute
+    await self.async_execute_cell(
+        cell, index, execution_count=self.code_cells_executed + 1
+    )
+  File "C:\Users\desir\AppData\Local\Programs\Python\Python313\Lib\site-packages\nbclient\client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "C:\Users\desir\AppData\Local\Programs\Python\Python313\Lib\site-packages\nbclient\client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import sqlite3
+import csv
+
+# Define file paths
+file_path = 'output_data.csv'
+new_db_path = 'normalized_data.db'
+
+# Create a new SQLite database connection
+conn = sqlite3.connect(new_db_path)
+cursor = conn.cursor()
+
+# Create tables for normalization
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS MainTable (
+    ID INTEGER PRIMARY KEY,
+    Age INTEGER,
+    AnnualIncome INTEGER,
+    FamilyMembers INTEGER,
+    ChronicDiseases INTEGER,
+    TravelInsurance INTEGER,
+    EmploymentTypeID INTEGER,
+    GraduateStatusID INTEGER,
+    FrequentFlyerID INTEGER,
+    TravelAbroadID INTEGER,
+    FOREIGN KEY (EmploymentTypeID) REFERENCES EmploymentType(ID),
+    FOREIGN KEY (GraduateStatusID) REFERENCES GraduateStatus(ID),
+    FOREIGN KEY (FrequentFlyerID) REFERENCES FrequentFlyer(ID),
+    FOREIGN KEY (TravelAbroadID) REFERENCES TravelAbroad(ID)
+);
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS EmploymentType (
+    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Type TEXT UNIQUE
+);
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS GraduateStatus (
+    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Status TEXT UNIQUE
+);
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS FrequentFlyer (
+    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Status TEXT UNIQUE
+);
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS TravelAbroad (
+    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    Status TEXT UNIQUE
+);
+""")
+
+# Commit schema creation
+conn.commit()
+
+# Read data from the CSV file
+data = []
+with open(file_path, mode='r') as file:
+    csv_reader = csv.DictReader(file)
+    for row in csv_reader:
+        data.append(row)
+
+# Extract unique values for categorical columns
+employment_types = set(row['Employment Type'] for row in data)
+graduate_status = set(row['GraduateOrNot'] for row in data)
+frequent_flyer_status = set(row['FrequentFlyer'] for row in data)
+travel_abroad_status = set(row['EverTravelledAbroad'] for row in data)
+
+# Populate categorical tables
+for employment in employment_types:
+    cursor.execute("INSERT OR IGNORE INTO EmploymentType (Type) VALUES (?);", (employment,))
+
+for status in graduate_status:
+    cursor.execute("INSERT OR IGNORE INTO GraduateStatus (Status) VALUES (?);", (status,))
+
+for flyer_status in frequent_flyer_status:
+    cursor.execute("INSERT OR IGNORE INTO FrequentFlyer (Status) VALUES (?);", (flyer_status,))
+
+for abroad_status in travel_abroad_status:
+    cursor.execute("INSERT OR IGNORE INTO TravelAbroad (Status) VALUES (?);", (abroad_status,))
+
+# Commit inserts into categorical tables
+conn.commit()
+
+# Map categorical values to IDs
+employment_type_map = {row[1]: row[0] for row in cursor.execute("SELECT ID, Type FROM EmploymentType;")}
+graduate_status_map = {row[1]: row[0] for row in cursor.execute("SELECT ID, Status FROM GraduateStatus;")}
+frequent_flyer_map = {row[1]: row[0] for row in cursor.execute("SELECT ID, Status FROM FrequentFlyer;")}
+travel_abroad_map = {row[1]: row[0] for row in cursor.execute("SELECT ID, Status FROM TravelAbroad;")}
+
+# Prepare and insert data into the main table
+main_table_data = [
+    (
+        int(row['']),  # ID
+        int(row['Age']),
+        int(row['AnnualIncome']),
+        int(row['FamilyMembers']),
+        int(row['ChronicDiseases']),
+        int(row['TravelInsurance']),
+        employment_type_map[row['Employment Type']],
+        graduate_status_map[row['GraduateOrNot']],
+        frequent_flyer_map[row['FrequentFlyer']],
+        travel_abroad_map[row['EverTravelledAbroad']]
+    )
+    for row in data
+]
+
+cursor.executemany("""
+INSERT INTO MainTable (
+    ID, Age, AnnualIncome, FamilyMembers, ChronicDiseases, TravelInsurance,
+    EmploymentTypeID, GraduateStatusID, FrequentFlyerID, TravelAbroadID
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+""", main_table_data)
+
+# Commit changes and close the connection
+conn.commit()
+conn.close()
+
+------------------
+
+
+[1;31m---------------------------------------------------------------------------[0m
+[1;31mIntegrityError[0m                            Traceback (most recent call last)
+Cell [1;32mIn[1], line 115[0m
+[0;32m     98[0m [38;5;66;03m# Prepare and insert data into the main table[39;00m
+[0;32m     99[0m main_table_data [38;5;241m=[39m [
+[0;32m    100[0m     (
+[0;32m    101[0m         [38;5;28mint[39m(row[[38;5;124m'[39m[38;5;124m'[39m]),  [38;5;66;03m# ID[39;00m
+[1;32m   (...)[0m
+[0;32m    112[0m     [38;5;28;01mfor[39;00m row [38;5;129;01min[39;00m data
+[0;32m    113[0m ]
+[1;32m--> 115[0m [43mcursor[49m[38;5;241;43m.[39;49m[43mexecutemany[49m[43m([49m[38;5;124;43m"""[39;49m
+[0;32m    116[0m [38;5;124;43mINSERT INTO MainTable ([39;49m
+[0;32m    117[0m [38;5;124;43m    ID, Age, AnnualIncome, FamilyMembers, ChronicDiseases, TravelInsurance,[39;49m
+[0;32m    118[0m [38;5;124;43m    EmploymentTypeID, GraduateStatusID, FrequentFlyerID, TravelAbroadID[39;49m
+[0;32m    119[0m [38;5;124;43m) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);[39;49m
+[0;32m    120[0m [38;5;124;43m"""[39;49m[43m,[49m[43m [49m[43mmain_table_data[49m[43m)[49m
+[0;32m    122[0m [38;5;66;03m# Commit changes and close the connection[39;00m
+[0;32m    123[0m conn[38;5;241m.[39mcommit()
+
+[1;31mIntegrityError[0m: UNIQUE constraint failed: MainTable.ID
+
